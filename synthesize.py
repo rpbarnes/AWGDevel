@@ -108,7 +108,7 @@ class pulsegen ():
             #}}}
             current_waveform = r_[current_waveform,thispart]
         return nddata(current_waveform,[-1],['t'],axis_coords = [resolution*r_[0:size(current_waveform)]]).set_units('t','s')#}}}
-    #{{{ basic functions
+    #{{{ basic functions for the operation codes.
     def check_5char_hex(self,a):
         int(round(a))
         if a > 2**(5*4)-1:
@@ -121,7 +121,7 @@ class pulsegen ():
             raise ValueError("This is not a valid opcode!")
         return [opcode * (1<<(5*4)) + self.check_5char_hex(number)] #0x100000
     #}}}
-    #{{{ and the actual codes
+    #{{{ and the actual operation codes
     def Bluebox(self,bluebox_number,x):
         return gen_code(1,x)
     def delay(self,x):
