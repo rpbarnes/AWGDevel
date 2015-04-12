@@ -178,7 +178,7 @@ class pulsegen ():
         pack.memory(memory)
         pack.sram(sram)
         pack.send()#}}}
-    def synthesize(self,data, zero_cal = False, do_normalize = 0.8, max_reps = False,autoSynthSwitch = False,autoTWTSwitch = False, frontBufferSynth = 5e-9,rearBufferSynth = -10.0e-9,frontBufferTWT = 200e-9,rearBufferTWT = -10.0e-9,longDelay = False,loop=True,**kwargs):#{{{
+    def synthesize(self,data, zero_cal = False, do_normalize = 0.8, max_reps = False,autoSynthSwitch = False,autoTWTSwitch = False, frontBufferSynth = 10e-9,rearBufferSynth = 0.0e-9,frontBufferTWT = 170e-9,rearBufferTWT = 10.0e-9,offsetTWT = 150e-9,longDelay = False,loop=True,**kwargs):#{{{
             
         try: # connect to LabRAD unless connection has already been established 
             self.cxn
@@ -280,20 +280,20 @@ class pulsegen ():
                 bounds.append([jumps[count],jumps[count+1]])
                 count += 2
             switchGate['t',:] = 0.0
+            print bounds
             for bound in bounds:
-                switchGate['t',lambda x: logical_and(x >= bound[0] - frontBufferTWT, x <= bound[1] + rearBufferTWT)] = 1.0
+                switchGate['t',lambda x: logical_and(x >= bound[0] - frontBufferTWT - offsetTWT, x <= bound[1] + rearBufferTWT - offsetTWT)] = 1.0
             for v, val in enumerate(switchGate.data):
                 if val > 0.0:
                     try:
                         sram[v] |= address
                     except:
                         print('Didn\'t add trigger at SRAM position %i' %v)#}}}
-        elif longDelay:
+        if longDelay:
             sram[16] |= 0x30000000 # add trigger pulse near beginning of sequence
             self.dacSignal(sram,twt_srt = longDelay, loop = False, max_reps = max_reps)
         else:
             sram[0] |= 0x30000000 # add trigger pulse at beginning of sequence
-            #self.dacSignal(sram,twt_srt = False, loop = False, max_reps = False)
             self.fpga.dac_run_sram(sram, loop)#}}}
 
     def wave2sram(self,wave):#{{{
