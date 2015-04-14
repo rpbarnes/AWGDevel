@@ -48,7 +48,8 @@ sram = py.zeros([2,1000]) # [[real],[imag]]
 sram[0][150:200] = 0.10 # a 50 ns long pulse 
 
 sram = wave2sram(sram[0],sram[1])
-sram[0] |= 0x30000000 # add trigger pulse at beginning of sequence
+for i in range(5,20):
+    sram[i] |= 0x30000000 # add trigger pulse at beginning of sequence
 
 fpga.dac_run_sram(sram,True) # just test to make sure we can play a waveform.
 print "I'm sleeping for 5 seconds"
@@ -79,16 +80,19 @@ sramLen = len(sram)
 
 # use Daniel's method of generating memory sequence from the DAC module
 memory=dacModule.MemorySequence()
-memory.noOp().sramStartAddress(0).sramEndAddress(sramLen-1).runSram().delayCycles(200).branchToStart()
+memory.noOp().sramStartAddress(0).sramEndAddress(sramLen-1).runSram().delayCycles(2000).branchToStart()
 
 
 # is it possible that this is looking for direct ethernet connection instead of fpga? No, it doesn't want a direct ethernet connection....
 p = fpga.packet()
 p.select_device(board)
-p.sram(sram)
 p.memory(memory)
+p.sram(sram)
 p.send()
 
-fpga.run_sequence(500, False)
-
+try:
+    while True:
+        fpga.run_sequence(50000, False)
+except KeyboardInterrupt:
+    print "Exiting code"
 
