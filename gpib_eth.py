@@ -509,7 +509,7 @@ class agilent():#{{{
         versionstring = self.socket.recv(self.buffer_len)
         print 'Connected to',versionstring
         # Set some parameters upon initialization
-        averages = 1000
+        averages = 1
         self.socket.send(':ACQuire:COUNt %i\n'%averages)
         self.xdata = self.get_preamble(2)
         self.socket.send(':WAVeform:FORMat WORD\n')

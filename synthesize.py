@@ -7,6 +7,7 @@ from labrad.units import V, mV, us, ns, GHz, MHz
 from workflow import switchSession as pss #(P)yle(S)witch(S)ession
 import scipy.optimize as o
 import numpy as np
+from servers.GHzDACs.Cleanup import dac as dacModule
 
 sys.path.append('C:\Users\hanlab\Desktop\GHz DAC\fpgaTest')
 FPGA_SERVER = 'ghz_fpgas'
@@ -134,42 +135,14 @@ class pulsegen ():
         # this sets the range of the SRAM that will be played
         return self.SRAM_start_address(start) + self.SRAM_stop_address(start+length-1)
     #}}}
-    def dacSignal(self,sram,twt_srt = 2e-3, reps=50000, loop=False, getTimingData=False, max_reps = False):#{{{
-        # total length or sram data
+    def dacSignal(self,sram, reps=100000, getTimingData=False, delay = 10e-4):#{{{
+        # Now make a memory list to send to the dac so we can get a repetition delay longer that 10 us.
+        clockCycles = delay / 4e-9 # number of cycles to sleep
         sramLen = len(sram)
-        # memory sequence
-        #{{{ Codes
-        NoOp = [0x000000]
-        start_timer = self.gen_code(4,0)
-        stop_timer = self.gen_code(4,1)
-        sram_based_timer = self.gen_code(4,2) # documentation says not implemented yet
-        play_SRAM = self.gen_code(0xC,0) # he calls this "call SRAM"
-        end_of_sequence = self.gen_code(0xF,0) # branch to beginning --> takes two clocks
-        #}}}
-
-        # New memory
-        memory = NoOp + self.SRAM_range(0,sramLen) + play_SRAM + self.delay(twt_srt) +  end_of_sequence
-
-        # Thomas' Memory List
-#        memory = [
-#            0x000000, # NoOp
-#            0x800000, # SRAM start address
-#            0xA00000 + sramLen - 1, # SRAM end address
-#            0xC00000, # call SRAM
-#            # 0x3186A0, # Delay 4ms to ensure average mode readback completes on A/D
-#            0x30C350 - 100, # Delay 2ms (50000 cycles = 2ms since clock is 25 MHz)
-#            # Don't know why I need the delay 300 ns shorter, but this gives me an exact 
-#            # repetition frequency of 500 Hz.
-#            0x400000, # start timer
-#            0x400001, # stop timer
-#            0xF00000, # branch back to start
-#        ]
+        # use Daniel's method of generating memory sequence from the DAC module
+        memory=dacModule.MemorySequence()
+        memory.noOp().sramStartAddress(0).sramEndAddress(sramLen-1).runSram().delayCycles(int(clockCycles)).branchToStart()
         # generate maximum number of repetitions that the memory size allows for
-        if max_reps:
-            for i in range(81):
-                memory.insert(5, 0x30C350 - 100)
-                memory.insert(5, 0xC00000)
-        # send memory and sram to board and run sequence
         self._sendDac(memory,sram,self.fpga)
         self.fpga.run_sequence(reps, getTimingData)#}}}
     def _sendDac(self,memory, sram, server):#{{{
@@ -178,8 +151,10 @@ class pulsegen ():
         pack.memory(memory)
         pack.sram(sram)
         pack.send()#}}}
-    def synthesize(self,data, zero_cal = False, do_normalize = 0.8, max_reps = False,autoSynthSwitch = False,autoReceiverSwitch = False,autoTWTSwitch = False, frontBufferSynth = 10e-9,rearBufferSynth = 0.0e-9,frontBufferReceiver = 200.0e-9, rearBufferReceiver = 100.0e-9, offsetReceiver = 0.0e-9,frontBufferTWT = 170e-9,rearBufferTWT = 10.0e-9,offsetTWT = 150e-9,longDelay = False,loop=True,**kwargs):#{{{
+    def synthesize(self,data, zero_cal = False, do_normalize = 0.8, max_reps = False,autoSynthSwitch = False,autoReceiverSwitch = False,autoTWTSwitch = False, frontBufferSynth = 25e-9,rearBufferSynth = -15.0e-9,frontBufferReceiver = 200.0e-9, rearBufferReceiver = 100.0e-9, offsetReceiver = 0.0e-9,frontBufferTWT = 170e-9,rearBufferTWT = 10.0e-9,offsetTWT = 150e-9,longDelay = False,**kwargs):#{{{
             
+        if longDelay > 10e-4:
+            raise ValueError("The delay is too long, do something less that 10e-4, note this will ultimately give you a 10 ms delay")
         try: # connect to LabRAD unless connection has already been established 
             self.cxn
         except:
@@ -217,7 +192,7 @@ class pulsegen ():
             else:
                 raise ValueError('value error, but neither real nor imaginary part of wave is NaN')
         if autoSynthSwitch: # Here add a sequence to the sram that puts out a TTL pulse gate to drive a switch from the j24 and j25 ECL outputs. #{{{
-            address = 0x20000000
+            address = 0x40000000
             switchGate = data.copy()
             switchGate.data = abs(switchGate.data)
 
@@ -327,11 +302,12 @@ class pulsegen ():
                     except:
                         print('Didn\'t add trigger at SRAM position %i' %v)#}}}
         if longDelay:
-            sram[16] |= 0x10000000 # add trigger pulse near beginning of sequence
-            self.dacSignal(sram,twt_srt = longDelay, loop = False, max_reps = max_reps)
+            for i in range(5,20):
+                sram[i] |= 0x10000000 # add trigger pulse at beginning of sequence
+            self.dacSignal(sram,delay = longDelay)
         else:
             sram[0] |= 0x10000000 # add trigger pulse at beginning of sequence
-            self.fpga.dac_run_sram(sram, loop)#}}}
+            self.fpga.dac_run_sram(sram, True)#}}}
 
     def wave2sram(self,wave):#{{{
         r'''Construct sram sequence for waveform. This takes python array and converts it to sram data for hand off to the FPGA. Wave cannot be nddata - this is stupid...'''

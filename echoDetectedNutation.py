@@ -18,7 +18,7 @@ try:
 except:
     a = g.agilent()
 
-averages = 256 # Averages on Scope
+averages = 16 # Averages on Scope
 a.acquire(averages)
 
 
@@ -26,7 +26,7 @@ a.acquire(averages)
 dx = 500e-9 # Delay at start
 d1 = 1000e-9 # delay between first and second pulse
 d2 = 400e-9 # delay between 90-pulse and 180-pulse (2nd and 3rd pulses)
-p0 = 16e-9 # varying pulse length, starting delay for this pulse
+p0 = 1e-9 # varying pulse length, starting delay for this pulse
 p1 = 16e-9 # 90-pulse length, 2nd pulse
 p2 = 32e-9 # 180-pulse length, 3rd pulse
 
@@ -51,9 +51,11 @@ for TIx,TValue in enumerate(TArray):
 
     modWave = modulation.copy() * wave.copy()
 
-    p.synthesize(modWave)#,longDelay = 1e-3)
+#    p.synthesize(modWave,longDelay = 1e-3)
+    p.synthesize(modWave,autoTWTSwitch = True, longDelay = 1e-3)
+    
 
-    d0 = 0e-9 #Offset from agilent scope
+    d0 = 40e-9 #Offset from agilent scope
 
     agilentPosition = dx + p0 + (d1 - p0) + 1.5*p1 + 2*d2 + 1.5*p2 + d0
 

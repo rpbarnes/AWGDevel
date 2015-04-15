@@ -1,5 +1,4 @@
 """Collect phase cycled signal using the bandpass filters on the video amplifiers and the DAC board to modulate the pulse by 300 MHz."""
-close('all')
 import gpib_eth as g
 try:
     yig
@@ -13,21 +12,25 @@ try:
     a
 except:
     a = g.agilent()
+from matlablike import *
+close('all')
 
 a.timebase(50e-9)
 a.setvoltage(0.01)
 a.acquire(256)
 sampleSet = a.Waveform_auto()
-yig.set_mwfreq(9.701e9)
-fc.set_field(3355.7)
+#yig.set_mwfreq(9.701e9)
+#fc.set_field(3355.7)
+yig.set_mwfreq(9.201e9)
+fc.set_field(3409.2)
 
 from matlablike import *
 import synthesize as s
 p = s.pulsegen()
 
-wave = p.make_highres_waveform([('delay',500e-9),('rect','x',16e-9),('delay',15e-6 - 516e-9)],resolution=1e-9)
+wave = p.make_highres_waveform([('delay',500e-9),('rect','x',16e-9),('delay',10e-6 - 516e-9)],resolution=1e-9)
 
-modFreq = -300e6
+modFreq = 300e6
 modulation = nddata(exp(1j*2*pi*modFreq*wave.getaxis('t'))).rename('value','t').labels('t',wave.getaxis('t'))
 
 phaselist = ['x','y','-x','-y']
@@ -37,9 +40,9 @@ data.labels(['t','phc'],[sampleSet.getaxis('t'),r_[0:len(phaselist)]*pi/4])
 
 
 for count,phase in enumerate(phaselist):
-    wave = p.make_highres_waveform([('delay',500e-9),('rect',phase,16e-9),('delay',15e-6 - 516e-9)],resolution=1e-9)
+    wave = p.make_highres_waveform([('delay',500e-9),('rect',phase,16e-9),('delay',200e-9),('rect','x',32e-9),('delay',10e-6 - 516e-9-232e-9)],resolution=1e-9)
     modWave = modulation.copy() * wave.copy()
-    p.synthesize(modWave,autoTWTSwitch=True,autoSynthSwitch=True)
+    p.synthesize(modWave,autoTWTSwitch=True,autoSynthSwitch=True,longDelay = 10e-4)
     data['phc',count] = a.Waveform_auto()
 
 
