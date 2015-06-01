@@ -151,7 +151,7 @@ class pulsegen ():
         pack.memory(memory)
         pack.sram(sram)
         pack.send()#}}}
-    def synthesize(self,data, zero_cal = False, do_normalize = 0.8, max_reps = False,autoSynthSwitch = False,autoReceiverSwitch = False,autoTWTSwitch = False, frontBufferSynth = 25e-9,rearBufferSynth = -15.0e-9,frontBufferReceiver = 200.0e-9, rearBufferReceiver = 100.0e-9, offsetReceiver = 0.0e-9,frontBufferTWT = 170e-9,rearBufferTWT = 10.0e-9,offsetTWT = 150e-9,longDelay = False,**kwargs):#{{{
+    def synthesize(self,data, zero_cal = False, do_normalize = 0.8, max_reps = False,autoSynthSwitch = False,autoReceiverSwitch = False,autoTWTSwitch = False, frontBufferSynth = 25e-9,rearBufferSynth = -15.0e-9,frontBufferReceiver = 200.0e-9, rearBufferReceiver = 100.0e-9, offsetReceiver = 0.0e-9,frontBufferTWT = 170e-9,rearBufferTWT = 10.0e-9,offsetTWT = 150e-9,longDelay = False,manualTrigger = False, manualTriggerChannel = 1,**kwargs):#{{{
             
         if longDelay > 10e-4:
             raise ValueError("The delay is too long, do something less that 10e-4, note this will ultimately give you a 10 ms delay")
@@ -167,15 +167,14 @@ class pulsegen ():
             if value != 0.0:
                 timeHigh.append(findStart.getaxis('t')[count])
         timeHigh = array(timeHigh)
-        if timeHigh.min() <= 500e-9:
-            raise ValueError("The first 500 ns of the pulse need to be zero. Shut up and put a 500 ns delay to start the sequence.")#}}}
+        if (timeHigh.min() <= 500e-9) and autoTWTSwitch:
+            raise ValueError("The first 500 ns of the pulse need to be zero put a 500 ns delay to start the sequence.")#}}}
         if do_normalize:
             waveI = data.runcopy(real).data * do_normalize
             waveQ = data.runcopy(imag).data * do_normalize
         else:
             waveI = data.runcopy(real).data
             waveQ = data.runcopy(imag).data
-
         if zero_cal: # this needs to be done!!
             offset_I = 1*self.zero_cal_data[0]
             offset_Q = 1*self.zero_cal_data[1]
@@ -195,13 +194,11 @@ class pulsegen ():
             address = 0x40000000
             switchGate = data.copy()
             switchGate.data = abs(switchGate.data)
-
             # find the bounding values of the pulse
             timeHigh = []
             for count,value in enumerate(switchGate.data):
                 if value != 0.0:
                     timeHigh.append(switchGate.getaxis('t')[count])
-             
             switchGate['t',:] = 1.0 # clear all data now and make gate 
             timeHigh = array(timeHigh)
             res = 2*abs(switchGate.getaxis('t')[1] - switchGate.getaxis('t')[0])
@@ -226,9 +223,9 @@ class pulsegen ():
                     try:
                         sram[v] |= address
                     except:
-                        print('Didn\'t add trigger at SRAM position %i' %v)#}}}
+                        pass
         if autoReceiverSwitch: # Here add a sequence to the sram that puts out a TTL pulse gate to drive a switch from the j24 and j25 ECL outputs. #{{{
-            address = 0x40000000
+            address = 0x20000000
             switchGate = data.copy()
             switchGate.data = abs(switchGate.data)
 
@@ -255,7 +252,6 @@ class pulsegen ():
                 bounds.append([jumps[count],jumps[count+1]])
                 count += 2
             switchGate['t',:] = 0.0
-            print bounds
             for bound in bounds:
                 switchGate['t',lambda x: logical_and(x >= bound[0] - frontBufferReceiver - offsetReceiver, x <= bound[1] + rearBufferReceiver - offsetReceiver)] = 1.0
             for v, val in enumerate(switchGate.data):
@@ -263,12 +259,11 @@ class pulsegen ():
                     try:
                         sram[v] |= address
                     except:
-                        print('Didn\'t add trigger at SRAM position %i' %v)#}}}
+                        pass
         if autoTWTSwitch: # Here add a sequence to the sram that puts out a TTL pulse gate to drive a switch from the j24 and j25 ECL outputs. #{{{
             address = 0x80000000
             switchGate = data.copy()
             switchGate.data = abs(switchGate.data)
-
             # find the bounding values of the pulse
             timeHigh = []
             for count,value in enumerate(switchGate.data):
@@ -292,7 +287,6 @@ class pulsegen ():
                 bounds.append([jumps[count],jumps[count+1]])
                 count += 2
             switchGate['t',:] = 0.0
-            print bounds
             for bound in bounds:
                 switchGate['t',lambda x: logical_and(x >= bound[0] - frontBufferTWT - offsetTWT, x <= bound[1] + rearBufferTWT - offsetTWT)] = 1.0
             for v, val in enumerate(switchGate.data):
@@ -300,7 +294,22 @@ class pulsegen ():
                     try:
                         sram[v] |= address
                     except:
-                        print('Didn\'t add trigger at SRAM position %i' %v)#}}}
+                        pass
+        if manualTrigger is not False:
+            addressDict = {
+                    1 : 0x20000000, # 1 -> reciever switch
+                    2 : 0x40000000, # 2 -> transmitter switch
+                    3 : 0x80000000, # 3 -> twt switch
+                    }
+            try:
+                manualTriggerAddress = addressDict[manualTriggerChannel]
+            except:
+                raise ValueError('The manual trigger channel must be 1, 2, or 3')
+            for trigger in manualTrigger: # manual trigger is a list of tuples with format -> (position,length) units of ns -> i.e. position and length must be integers
+                position = trigger[0]
+                length = trigger[1]
+                for i in range(position,position+length):
+                    sram[i] |= manualTriggerAddress
         if longDelay:
             for i in range(5,20):
                 sram[i] |= 0x10000000 # add trigger pulse at beginning of sequence
@@ -308,7 +317,6 @@ class pulsegen ():
         else:
             sram[0] |= 0x10000000 # add trigger pulse at beginning of sequence
             self.fpga.dac_run_sram(sram, True)#}}}
-
     def wave2sram(self,wave):#{{{
         r'''Construct sram sequence for waveform. This takes python array and converts it to sram data for hand off to the FPGA. Wave cannot be nddata - this is stupid...'''
         waveA = real(wave)
@@ -323,7 +331,6 @@ class pulsegen ():
         dacBData=[y<<14 for y in truncatedB] # Shift DAC B data by 14 bits, why is this done??
         sram=[dacAData[i]|dacBData[i] for i in range(len(dacAData))] # Combine DAC A and DAC B
         return sram#}}}
-
     def downsample(self,inputdata, bandwidth = 1e9):#{{{
         data = inputdata.copy()
         x = data.getaxis('t')

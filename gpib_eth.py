@@ -804,14 +804,14 @@ class lockin_amp ():
         except:
             raise ValueError('The lockin amp is not responding to the ID command --> maybe it\'s not on, not hooked up, or you\'re talking to the wrong GPIB address')
         print 'Connected to ',idstring,'\n'
-        self.front_display(1,'X')
-        self.front_display(2,'Y')
+#        self.front_display(1,'X')
+#        self.front_display(2,'Y')
         #{{{ set the filter very narrow, wait, and perform the auto offset
-        self.wait_until_ready()
-        self.filter(24)
+#        self.wait_until_ready()
+#        self.filter(24)
         #{{{ perform auto sensitivity
         #self.auto_gain()
-        self.wait_until_ready()
+#        self.wait_until_ready()
         #}}}
         ##{{{ auto offset, and redo sensitivity
         #self.auto_offset()
